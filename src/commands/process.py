@@ -3,7 +3,8 @@ Process command for Resume Analyzer Agent
 """
 
 import os
-from typing import Optional
+from typing import Optional, List
+import glob
 
 import pytz
 import typer
@@ -23,8 +24,7 @@ from misc.utils import format_processing_stats
 
 
 async def process_command(
-    cv_folder: str,
-    jd_file: str,
+    jobs_folder: str,
     notion_db_id: Optional[str],
     notion_api_key: Optional[str],
     gemini_api_key: Optional[str],
@@ -39,8 +39,7 @@ async def process_command(
     Processes the candidate screening by automatically analyzing resumes, matching them to job requirements, and posting the structured data to Notion.
 
     Args:
-        cv_folder: Path to folder containing CV files
-        jd_file: Path to Job Description PDF file
+        jobs_folder: Path to the main jobs folder containing position sub-folders
         notion_db_id: Notion Database ID (overrides .env)
         notion_api_key: Notion API Key (overrides .env)
         gemini_api_key: Gemini API Key (overrides .env)
@@ -64,32 +63,19 @@ async def process_command(
         )
     )
 
-    # Run the main processing
-    """
-    Main processing function that coordinates the CV scanning workflow.
+    # Validate jobs_folder path
+    if not os.path.isdir(jobs_folder):
+        rprint(f"[bold red]Error:[/bold red] The specified path '{jobs_folder}' is not a valid directory or does not exist.")
+        raise typer.Exit(code=1)
 
-    Args:
-        cv_folder: Path to folder containing CV files
-        jd_file: Path to JD PDF file
-        notion_db_id: Notion database ID (optional, from CLI)
-        notion_api_key: Notion API key (optional, from CLI)
-        gemini_api_key: Gemini API key (optional, from CLI)
-        gemini_model: Gemini model name (optional, from CLI)
-        gemini_temperature: Gemini temperature (optional, from CLI)
-        timezone: Timezone for date formatting (optional, from CLI)
-        console: Rich console for display
-
-    Raises:
-        ValueError: If required files are not found
-        typer.Exit: To exit the CLI application
-    """
-    # Pre-run checks
-    if not os.path.exists(cv_folder):
-        raise ValueError(f"CV folder not found: {cv_folder}")
-    if not os.path.exists(jd_file):
-        raise ValueError(f"Job Description file not found: {jd_file}")
-    if not jd_file.lower().endswith(".pdf"):
-        raise ValueError(f"Job Description must be a PDF file: {jd_file}")
+    # Initialize overall statistics
+    overall_total_files = 0
+    overall_processed_files = 0
+    overall_successful_uploads = 0
+    overall_duplicate_uploads = 0
+    overall_failed_uploads = 0
+    all_failed_files: List[str] = []
+    all_duplicate_files: List[str] = []
 
     # Load configuration
     try:
@@ -115,7 +101,6 @@ async def process_command(
         rprint(f"[bold red]Invalid timezone:[/bold red] {config['TIMEZONE']}")
         raise typer.Exit(code=1)
     
-    
     # Initialize clients
     try:
         await verify_gemini_api_key(config["GEMINI_API_KEY"])
@@ -140,89 +125,157 @@ async def process_command(
         )
         raise typer.Exit(code=1)
 
-    # Process JD file
-    with console.status("[bold green]Processing Job Description...[/bold green]"):
-        try:
-            jd_text = extract_text_from_pdf(jd_file)
-            rprint("[bold green]✓[/bold green] Job Description file processed")
-        except Exception as e:
-            rprint(f"[bold red]Error processing Job Description:[/bold red] {str(e)}")
-            raise typer.Exit(code=1)
+    processed_log_file = ".processed_files.log"
+    
+    # Traverse the jobs folder
+    for root, dirs, files in os.walk(jobs_folder):
+        if "CVs" in dirs:
+            cv_folder = os.path.join(root, "CVs")
+            
+            # Find JD file in the current root (position folder)
+            jd_files_in_folder = [f for f in files if f.lower().endswith(".pdf")]
 
-    # Get CV files
-    cv_files = get_cv_files(cv_folder)
-    total_files = len(os.listdir(cv_folder))
-    processed_files = len(cv_files)
+            jd_file = None
+            if len(jd_files_in_folder) == 1:
+                jd_file = os.path.join(root, jd_files_in_folder[0])
+            elif len(jd_files_in_folder) > 1:
+                rprint(
+                    f"\n[bold yellow]Warning:[/bold yellow] Multiple PDF files found in '{root}'. Skipping this position as JD cannot be determined."
+                )
+                continue
+            else:
+                rprint(
+                    f"\n[bold yellow]Warning:[/bold yellow] No PDF (JD) file found in '{root}'. Skipping this position."
+                )
+                continue
 
-    if not cv_files:
-        rprint(
-            f"[bold yellow]No supported CV files (PDF, DOCX) found in {cv_folder}[/bold yellow]"
-        )
-        raise typer.Exit(code=0)
+            rprint(
+                Panel(
+                    f"[bold blue]Processing Position:[/bold blue] {os.path.basename(root)}\n"
+                    f"JD: {os.path.basename(jd_file)}\n"
+                    f"CVs Folder: {os.path.basename(cv_folder)}",
+                    title="Current Position",
+                    expand=False,
+                )
+            )
 
-    # Format CV files for processing
-    formatted_cv_files = format_cv_files(cv_files)
+            # Process JD file
+            with console.status(f"[bold green]Processing Job Description: {os.path.basename(jd_file)}...[/bold green]"):
+                try:
+                    jd_text = extract_text_from_pdf(jd_file)
+                    rprint(f"[bold green]✓[/bold green] Job Description '{os.path.basename(jd_file)}' processed")
+                except Exception as e:
+                    rprint(f"[bold red]Error processing Job Description '{os.path.basename(jd_file)}':[/bold red] {str(e)}")
+                    continue # Skip to next position
 
-    # PHASE 1: Extract text from all CVs
-    cv_data = await extract_cv_text(formatted_cv_files, console)
+            # Get CV files
+            cv_files = get_cv_files(cv_folder)
+            current_total_files = len(os.listdir(cv_folder))
+            overall_total_files += current_total_files
 
-    if not cv_data:
-        rprint(
-            "[bold yellow]No CV content could be extracted from any files[/bold yellow]"
-        )
-        raise typer.Exit(code=0)
+            # Read processed files
+            if os.path.exists(processed_log_file):
+                with open(processed_log_file, "r") as f:
+                    processed_files_set = set(f.read().splitlines())
+            else:
+                processed_files_set = set()
 
-    # PHASE 2: Process with Gemini API
-    candidates = await process_with_gemini(
-        cv_data=cv_data,
-        jd_text=jd_text,
-        gemini_client=gemini_client,
-        model=config["GEMINI_MODEL"],
-        temperature=float(config["TEMPERATURE"]),
-        console=console,
-        max_concurrent=max_gemini_concurrent,
-    )
+            # Filter out already processed files
+            unprocessed_cv_files = [
+                file for file in cv_files if os.path.basename(file) not in processed_files_set
+            ]
+            skipped_files_count = len(cv_files) - len(unprocessed_cv_files)
 
-    if not candidates:
-        rprint(
-            "[bold yellow]No candidates could be processed with Gemini API[/bold yellow]"
-        )
-        raise typer.Exit(code=0)
+            if skipped_files_count > 0:
+                rprint(
+                    f"[bold yellow]Skipping {skipped_files_count} files that have already been processed for this position.[/bold yellow]"
+                )
 
-    # PHASE 3: Upload to Notion
-    (
-        successful_files,
-        duplicate_files,
-        failed_files,
-        failed_files_list,
-        duplicate_files_list,
-    ) = await upload_to_notion(
-        candidates=candidates,
-        notion_manager=notion_manager,
-        console=console,
-        max_concurrent=max_notion_concurrent,
-    )
+            if not unprocessed_cv_files:
+                rprint(
+                    f"[bold yellow]No new CV files to process for this position in {os.path.basename(cv_folder)}[/bold yellow]"
+                )
+                continue # Skip to next position
 
-    # Display summary report
+            current_processed_files = len(unprocessed_cv_files)
+            overall_processed_files += current_processed_files
+
+            # Format CV files for processing
+            formatted_cv_files = format_cv_files(unprocessed_cv_files)
+
+            # PHASE 1: Extract text from all CVs
+            cv_data = await extract_cv_text(formatted_cv_files, console)
+
+            if not cv_data:
+                rprint(
+                    "[bold yellow]No CV content could be extracted from any files for this position[/bold yellow]"
+                )
+                continue # Skip to next position
+
+            # PHASE 2: Process with Gemini API
+            candidates = await process_with_gemini(
+                cv_data=cv_data,
+                jd_text=jd_text,
+                gemini_client=gemini_client,
+                model=config["GEMINI_MODEL"],
+                temperature=float(config["TEMPERATURE"]),
+                console=console,
+                max_concurrent=max_gemini_concurrent,
+            )
+
+            if not candidates:
+                rprint(
+                    "[bold yellow]No candidates could be processed with Gemini API for this position[/bold yellow]"
+                )
+                continue # Skip to next position
+
+            # PHASE 3: Upload to Notion
+            (
+                successful_files,
+                duplicate_files,
+                failed_files,
+                successful_files_list,
+                failed_files_list,
+                duplicate_files_list,
+            ) = await upload_to_notion(
+                candidates=candidates,
+                notion_manager=notion_manager,
+                console=console,
+                max_concurrent=max_notion_concurrent,
+            )
+
+            overall_successful_uploads += successful_files
+            overall_duplicate_uploads += duplicate_files
+            overall_failed_uploads += failed_files
+            all_failed_files.extend(failed_files_list)
+            all_duplicate_files.extend(duplicate_files_list)
+
+            # Update processed files log
+            if successful_files_list:
+                with open(processed_log_file, "a") as f:
+                    for file_name in successful_files_list:
+                        f.write(f"{file_name}\n")
+
+    # Display overall summary report
+    rprint(Panel.fit("[bold green]Overall Processing Summary[/bold green]"))
     summary = format_processing_stats(
-        total_files=total_files,
-        processed_files=processed_files,
-        successful_files=successful_files,
-        duplicate_files=duplicate_files,
-        failed_files=failed_files + (processed_files - len(candidates)),
+        total_files=overall_total_files,
+        processed_files=overall_processed_files,
+        successful_files=overall_successful_uploads,
+        duplicate_files=overall_duplicate_uploads,
+        failed_files=overall_failed_uploads,
         notion_db_id=config["NOTION_DATABASE_ID"],
     )
-
     rprint(summary)
 
-    # Display failed files, if any
-    if failed_files_list:
-        rprint(Panel.fit("[bold red]Failed Uploads[/bold red]"))
-        for file_name in failed_files_list:
+    # Display all failed files
+    if all_failed_files:
+        rprint(Panel.fit("[bold red]All Failed Uploads[/bold red]"))
+        for file_name in all_failed_files:
             rprint(f"- {file_name}")
 
-    # Display duplicate files, if any
-    if duplicate_files_list:
-        rprint(Panel.fit("[bold yellow]Duplicate Files (Skipped)[/bold yellow]"))
-        for file_name in duplicate_files_list:
+    # Display all duplicate files
+    if all_duplicate_files:
+        rprint(Panel.fit("[bold yellow]All Duplicate Files (Skipped)[/bold yellow]"))
+        for file_name in all_duplicate_files:
             rprint(f"- {file_name}")

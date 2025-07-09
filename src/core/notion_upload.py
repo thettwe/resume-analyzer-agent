@@ -22,7 +22,7 @@ async def upload_to_notion(
     notion_manager: NotionManager,
     console,
     max_concurrent: int = 3,  # Maximum number of concurrent uploads
-) -> Tuple[int, int, int, List[str], List[str]]:
+) -> Tuple[int, int, int, List[str], List[str], List[str]]:
     """
     Upload candidates to Notion database.
 
@@ -33,11 +33,12 @@ async def upload_to_notion(
         max_concurrent: Maximum number of concurrent uploads (default: 3)
 
     Returns:
-        Tuple of (successful_files, duplicate_files, failed_files, failed_files_list, duplicate_files_list)
+        Tuple of (successful_files, duplicate_files, failed_files, successful_files_list, failed_files_list, duplicate_files_list)
     """
     successful_files = 0
     duplicate_files = 0
     failed_files = 0
+    successful_files_list = []
     failed_files_list = []
     duplicate_files_list = []
 
@@ -52,7 +53,6 @@ async def upload_to_notion(
                 is_duplicate = await notion_manager.check_for_duplicate(
                     candidate_item["candidate"].email
                 )
-
                 if is_duplicate:
                     rprint(
                         f"\n[bold yellow]Skipping duplicate candidate: {candidate_item['candidate'].full_name} ({candidate_item['candidate'].email})[/bold yellow]"
@@ -79,7 +79,6 @@ async def upload_to_notion(
                         "file_name": candidate_item["file_name"],
                         "error": "Failed to create Notion page",
                     }
-
             except Exception as e:
                 return {
                     "status": "failed",
@@ -101,9 +100,7 @@ async def upload_to_notion(
         )
 
         # Create and schedule all Notion tasks
-        notion_tasks = [
-            process_notion_upload(candidate_item) for candidate_item in candidates
-        ]
+        notion_tasks = [process_notion_upload(candidate_item) for candidate_item in candidates]
         notion_results = []
 
         # Process tasks as they complete
@@ -113,6 +110,7 @@ async def upload_to_notion(
 
             if result["status"] == "success":
                 successful_files += 1
+                successful_files_list.append(result["file_name"])
             elif result["status"] == "duplicate":
                 duplicate_files += 1
                 duplicate_files_list.append(result["file_name"])
@@ -125,11 +123,21 @@ async def upload_to_notion(
 
             progress.update(notion_task, advance=1)
 
+    rprint(
+        f"[bold green]✓[/bold green] Uploaded {successful_files} candidates to Notion"
+    )
+    if duplicate_files > 0:
+        rprint(
+            f"[bold yellow]⚠[/bold yellow] Skipped {duplicate_files} duplicate candidates"
+        )
+    if failed_files > 0:
+        rprint(f"[bold red]✗[/bold red] Failed to upload {failed_files} candidates")
+
     return (
         successful_files,
         duplicate_files,
         failed_files,
+        successful_files_list,
         failed_files_list,
         duplicate_files_list,
     )
-

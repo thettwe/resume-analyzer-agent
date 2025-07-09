@@ -52,10 +52,9 @@ def setup():
 
 @app.command()
 def process(
-    cv_folder: str = typer.Argument(
-        ..., help="Path to folder containing CV files (PDF, DOCX)"
+    jobs_folder: str = typer.Argument(
+        ..., help="Path to the main jobs folder containing position sub-folders"
     ),
-    jd_file: str = typer.Argument(..., help="Path to Job Description PDF file"),
     notion_db_id: Optional[str] = typer.Option(
         None, "--notion-db", "-nd", help="Notion Database ID (overrides .env)"
     ),
@@ -91,22 +90,21 @@ def process(
     ),
 ):
     """
-    Process CV files against a job description and upload results to Notion.
+    Processes resumes for multiple job positions based on a structured folder layout.
     """
     # Run the process command asynchronously
     # try:
     asyncio.run(
         process_command(
-            cv_folder,
-            jd_file,
-            notion_db_id,
-            notion_api_key,
-            gemini_api_key,
-            gemini_model,
-            gemini_temperature,
-            max_gemini_concurrent,
-            max_notion_concurrent,
-            timezone,
-            console,
+            jobs_folder=jobs_folder,
+            notion_db_id=notion_db_id,
+            notion_api_key=notion_api_key,
+            gemini_api_key=gemini_api_key,
+            gemini_model=gemini_model,
+            gemini_temperature=gemini_temperature,
+            max_gemini_concurrent=max_gemini_concurrent,
+            max_notion_concurrent=max_notion_concurrent,
+            timezone=timezone,
+            console=console,
         )
     )

@@ -198,3 +198,4 @@ cython_debug/
 .env.local
 test_pdfs/
 test_docs/
+.processed_files.log

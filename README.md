@@ -144,18 +144,49 @@ Ensure your Notion database has the following properties:
 
 ## Usage
 
-### Process CVs Against a Job Description
+The Resume Analyzer Agent is designed to process resumes for multiple job positions efficiently. To do this, you need to organize your files in a specific structure.
 
-```bash
-python3 src/main.py process "path/to/cv/folder" "path/to/jd.pdf"
+### 1. Folder Structure
+
+Create a main "jobs" folder. Inside this folder, create a separate sub-folder for each job position you are hiring for.
+
+For each position folder, you must include:
+1.  **A single Job Description (JD) file** in PDF format (`.pdf`).
+2.  **A sub-folder named `CVs`** containing all the candidate resumes for that position. Supported resume formats are `.pdf` and `.docx`.
+
+Here is an example of the required structure:
+
+```
+/path/to/your/jobs_folder/
+├── Software-Engineer/
+│   ├── Software-Engineer-JD.pdf
+│   └── CVs/
+│       ├── candidate1.pdf
+│       ├── candidate2.docx
+│       └── ...
+└── Data-Analyst/
+    ├── Data-Analyst-JD.pdf
+    └── CVs/
+        ├── candidate3.pdf
+        └── ...
 ```
 
-### Command Options
+### 2. Run the Process Command
 
-Additional options can be specified:
+Once your folders are set up, run the `process` command and point it to your main jobs folder:
 
 ```bash
-python3 src/main.py process "path/to/cv/folder" "path/to/jd.pdf" --notion-db "your-notion-db-id" --gemini-model "gemini-1.5-flash"
+python3 src/main.py process "/path/to/your/jobs_folder"
+```
+
+The agent will automatically traverse each position folder, find the JD, and process all resumes within the corresponding `CVs` sub-folder.
+
+### 3. Command Options
+
+You can override the settings from your `.env` file by using the following command-line options:
+
+```bash
+python3 src/main.py process "/path/to/your/jobs_folder" --notion-db "your-notion-db-id" --gemini-model "gemini-1.5-flash"
 ```
 
 Available options:
