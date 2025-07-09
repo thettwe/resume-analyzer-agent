@@ -190,7 +190,13 @@ async def process_command(
         raise typer.Exit(code=0)
 
     # PHASE 3: Upload to Notion
-    successful_files, duplicate_files, failed_files = await upload_to_notion(
+    (
+        successful_files,
+        duplicate_files,
+        failed_files,
+        failed_files_list,
+        duplicate_files_list,
+    ) = await upload_to_notion(
         candidates=candidates,
         notion_manager=notion_manager,
         console=console,
@@ -208,3 +214,15 @@ async def process_command(
     )
 
     rprint(summary)
+
+    # Display failed files, if any
+    if failed_files_list:
+        rprint(Panel.fit("[bold red]Failed Uploads[/bold red]"))
+        for file_name in failed_files_list:
+            rprint(f"- {file_name}")
+
+    # Display duplicate files, if any
+    if duplicate_files_list:
+        rprint(Panel.fit("[bold yellow]Duplicate Files (Skipped)[/bold yellow]"))
+        for file_name in duplicate_files_list:
+            rprint(f"- {file_name}")

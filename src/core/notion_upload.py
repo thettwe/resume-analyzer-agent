@@ -22,7 +22,7 @@ async def upload_to_notion(
     notion_manager: NotionManager,
     console,
     max_concurrent: int = 3,  # Maximum number of concurrent uploads
-) -> Tuple[int, int, int]:
+) -> Tuple[int, int, int, List[str], List[str]]:
     """
     Upload candidates to Notion database.
 
@@ -33,11 +33,13 @@ async def upload_to_notion(
         max_concurrent: Maximum number of concurrent uploads (default: 3)
 
     Returns:
-        Tuple of (successful_files, duplicate_files, failed_files)
+        Tuple of (successful_files, duplicate_files, failed_files, failed_files_list, duplicate_files_list)
     """
     successful_files = 0
     duplicate_files = 0
     failed_files = 0
+    failed_files_list = []
+    duplicate_files_list = []
 
     # Create a semaphore to limit concurrent uploads
     semaphore = asyncio.Semaphore(max_concurrent)
@@ -113,12 +115,21 @@ async def upload_to_notion(
                 successful_files += 1
             elif result["status"] == "duplicate":
                 duplicate_files += 1
+                duplicate_files_list.append(result["file_name"])
             else:
                 failed_files += 1
+                failed_files_list.append(result["file_name"])
                 rprint(
                     f"\n[bold red]Error uploading {result['file_name']} to Notion: {result.get('error', 'Unknown error')}[/bold red]"
                 )
 
             progress.update(notion_task, advance=1)
 
-    return successful_files, duplicate_files, failed_files
+    return (
+        successful_files,
+        duplicate_files,
+        failed_files,
+        failed_files_list,
+        duplicate_files_list,
+    )
+
