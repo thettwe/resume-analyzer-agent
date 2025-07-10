@@ -2,7 +2,7 @@ from typing import Dict, Optional
 
 from rich import print as rprint
 
-from config.settings import settings
+from .settings import settings
 
 
 def get_config(

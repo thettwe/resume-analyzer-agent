@@ -17,6 +17,12 @@ class Settings(BaseSettings, extra="ignore"):
     )
     TEMPERATURE: float = Field(default=0.0, json_schema_extra={"env": "TEMPERATURE"})
     TIMEZONE: str = Field(default="UTC", json_schema_extra={"env": "TIMEZONE"})
+    MAX_GEMINI_CONCURRENT: int = Field(
+        default=10, json_schema_extra={"env": "MAX_GEMINI_CONCURRENT"}
+    )
+    MAX_NOTION_CONCURRENT: int = Field(
+        default=5, json_schema_extra={"env": "MAX_NOTION_CONCURRENT"}
+    )
 
 
 settings = Settings()

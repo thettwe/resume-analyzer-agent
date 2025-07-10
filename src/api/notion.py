@@ -7,7 +7,7 @@ import aiohttp
 from notion_client import AsyncClient as NotionClient
 from rich import print as rprint
 from pytz import timezone as tzinfo
-from api.models import Candidate
+from .models import Candidate
 
 
 class NotionManager:
@@ -36,13 +36,13 @@ class NotionManager:
 
         return self
 
-    async def check_for_duplicate(self, email: str) -> bool:
+    async def check_for_duplicate(self, email: str, position_title: str) -> bool:
         """
         Check if a candidate with the given email already exists for this job.
 
         Args:
             email: Candidate's email
-            job_location: Location
+            position_title: The title of the job position
 
         Returns:
             True if a duplicate exists, False otherwise
@@ -55,6 +55,10 @@ class NotionManager:
                 "filter": {
                     "and": [
                         {"property": "Email", "email": {"equals": email}},
+                        {
+                            "property": "Position Title",
+                            "select": {"equals": position_title},
+                        },
                     ]
                 }
             }

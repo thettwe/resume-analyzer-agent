@@ -10,10 +10,13 @@ from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
 
-from commands.process import process_command
+from .commands.process import process_command
+from .commands.watch import watch_command
+from .config.settings import settings
+
 
 # Import command modules
-from commands.setup import setup_command
+from .commands.setup import setup_command
 
 # Create Typer app
 app = typer.Typer(
@@ -34,7 +37,8 @@ def main(ctx: typer.Context):
                 "This tool streamlines the early stages of candidate screening by automatically analyzing resumes, matching them to job requirements, and posting the structured data to Notion.\n\n"
                 "[bold yellow]Available commands:[/bold yellow]\n"
                 "  [bold]setup[/bold]    - Create a template .env file for configuration\n"
-                "  [bold]process[/bold]  - Process CV files against a job description\n\n"
+                "  [bold]process[/bold]  - Process all CVs in a folder in a single run\n"
+                "  [bold]watch[/bold]    - Monitor a folder and process new CVs automatically\n\n"
                 "Run [bold]python src/app.py --help[/bold] for more information on available commands.",
                 title="Resume Analyzer Agent",
                 expand=False,
@@ -77,16 +81,22 @@ def process(
         help="Timezone for date/time formatting (overrides .env)",
     ),
     max_gemini_concurrent: int = typer.Option(
-        10,
+        settings.MAX_GEMINI_CONCURRENT,
         "--gemini-concurrency",
         "-gc",
         help="Maximum number of concurrent Gemini API calls",
     ),
     max_notion_concurrent: int = typer.Option(
-        5,
+        settings.MAX_NOTION_CONCURRENT,
         "--notion-concurrency",
         "-nc",
         help="Maximum number of concurrent Notion uploads",
+    ),
+    output_csv: Optional[str] = typer.Option(
+        None,
+        "--output-csv",
+        "-o",
+        help="Path to save a CSV report of processed candidates.",
     ),
 ):
     """
@@ -96,6 +106,64 @@ def process(
     # try:
     asyncio.run(
         process_command(
+            jobs_folder=jobs_folder,
+            notion_db_id=notion_db_id,
+            notion_api_key=notion_api_key,
+            gemini_api_key=gemini_api_key,
+            gemini_model=gemini_model,
+            gemini_temperature=gemini_temperature,
+            max_gemini_concurrent=max_gemini_concurrent,
+            max_notion_concurrent=max_notion_concurrent,
+            timezone=timezone,
+            console=console,
+            output_csv_path=output_csv,
+        )
+    )
+
+@app.command()
+def watch(
+    jobs_folder: str = typer.Argument(
+        ..., help="Path to the main jobs folder to monitor for new CVs"
+    ),
+    notion_db_id: Optional[str] = typer.Option(
+        None, "--notion-db", "-nd", help="Notion Database ID (overrides .env)"
+    ),
+    notion_api_key: Optional[str] = typer.Option(
+        None, "--notion-api-key", "-na", help="Notion API Key (overrides .env)"
+    ),
+    gemini_api_key: Optional[str] = typer.Option(
+        None, "--gemini-api-key", "-ga", help="Gemini API Key (overrides .env)"
+    ),
+    gemini_model: Optional[str] = typer.Option(
+        None, "--gemini-model", "-gm", help="Gemini Model (overrides .env)"
+    ),
+    gemini_temperature: Optional[float] = typer.Option(
+        None, "--gemini-temperature", "-gt", help="Gemini Temperature (overrides .env)"
+    ),
+    timezone: Optional[str] = typer.Option(
+        None,
+        "--timezone",
+        "-tz",
+        help="Timezone for date/time formatting (overrides .env)",
+    ),
+    max_gemini_concurrent: int = typer.Option(
+        settings.MAX_GEMINI_CONCURRENT,
+        "--gemini-concurrency",
+        "-gc",
+        help="Maximum number of concurrent Gemini API calls",
+    ),
+    max_notion_concurrent: int = typer.Option(
+        settings.MAX_NOTION_CONCURRENT,
+        "--notion-concurrency",
+        "-nc",
+        help="Maximum number of concurrent Notion uploads",
+    ),
+):
+    """
+    Monitors the jobs folder and processes new CVs as they are added.
+    """
+    asyncio.run(
+        watch_command(
             jobs_folder=jobs_folder,
             notion_db_id=notion_db_id,
             notion_api_key=notion_api_key,

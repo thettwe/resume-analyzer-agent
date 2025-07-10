@@ -1,17 +1,15 @@
 import os
 import sys
 
-# Add the src directory to path if needed
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
+# This is the magic bit. It finds the project's root directory by
+# taking the directory of this file (__file__), which is `src`, and
+# going one level up. It then adds this root directory to the front
+# of Python's search path.
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
 
-try:
-    from src.app import app
-except ModuleNotFoundError:
-    # When run directly with typer
-    from app import app
-
+# Now that the project root is in the path, this import will work correctly.
+from src.app import app
 
 if __name__ == "__main__":
     app()

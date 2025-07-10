@@ -1,8 +1,8 @@
 from google import genai
 from google.genai import types
 
-from api.models import Candidate
-from api.prompts import SYSTEM_PROMPT, USER_PROMPT
+from .models import Candidate
+from .prompts import SYSTEM_PROMPT, USER_PROMPT
 
 from aiohttp import ClientSession
 

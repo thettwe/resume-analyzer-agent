@@ -5,7 +5,7 @@ Setup command for Resume Analyzer Agent
 from rich import print as rprint
 from rich.panel import Panel
 
-from config.config import create_env_example
+from ..config.config import create_env_example
 
 
 def setup_command():

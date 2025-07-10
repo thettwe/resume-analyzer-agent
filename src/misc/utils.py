@@ -1,5 +1,9 @@
+import csv
+from typing import List
 from rich.panel import Panel
 from rich.text import Text
+
+from ..api.models import Candidate
 
 
 class CustomPanel(Panel):
@@ -7,7 +11,6 @@ class CustomPanel(Panel):
 
     def __str__(self):
         """Custom string representation that includes the content."""
-        # Handle either string or Text object as renderable
         if isinstance(self.renderable, Text):
             return str(self.renderable.plain)
         return str(self.renderable)
@@ -23,17 +26,6 @@ def format_processing_stats(
 ) -> Panel:
     """
     Format the processing statistics for display.
-
-    Args:
-        total_files: Total number of files found
-        processed_files: Number of files processed
-        successful_files: Number of files successfully uploaded to Notion
-        duplicate_files: Number of files skipped as duplicates
-        failed_files: Number of files that failed processing
-        notion_db_id: Notion database ID
-
-    Returns:
-        Rich Panel containing the formatted summary
     """
     summary = [
         "Processing Complete",
@@ -46,9 +38,28 @@ def format_processing_stats(
     if processed_files < total_files:
         summary.append(f"{total_files - processed_files} files were not processed")
 
-    # Add the Notion Database URL
     notion_url = f"https://notion.so/{notion_db_id.replace('-', '')}"
     summary.append(f"\nNotion Database URL: {notion_url}")
 
     summary_text = "\n".join(summary)
     return CustomPanel(summary_text, title="Processing Summary")
+
+
+def write_candidates_to_csv(candidates: List[Candidate], file_path: str):
+    """
+    Writes a list of Candidate objects to a CSV file.
+    """
+    if not candidates:
+        return
+
+    header = list(Candidate.model_fields.keys())
+    
+    with open(file_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        for candidate in candidates:
+            writer.writerow(
+                [
+                    getattr(candidate, field) for field in header
+                ]
+            )
